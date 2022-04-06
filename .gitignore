@@ -3,6 +3,14 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# JB idea specific project files
+/**/.idea
+
+# CXX project build directories
+/**/cmake-build-debug
+/**/cmake-build-release
+/**/cmake-build-relwithdebinfo
+
 # User-specific files
 *.rsuser
 *.suo
