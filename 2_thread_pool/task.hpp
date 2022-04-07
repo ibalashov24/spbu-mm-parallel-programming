@@ -41,6 +41,13 @@ namespace mt {
         [[nodiscard]] virtual bool is_completed() const = 0;
 
         /**
+         * @brief Checks whether task is aborted.
+         *
+         * @return True if task is aborted
+         */
+        [[nodiscard]] virtual bool is_aborted() const = 0;
+
+        /**
          * @brief Retrieves result of the task evaluation
          *
          * @return Evaluation result or execution exception
@@ -80,6 +87,7 @@ namespace mt {
 
             ~TaskSimple() override = default;
             [[nodiscard]] bool is_completed() const override;
+            [[nodiscard]] bool is_aborted() const override;
             TResult result() const override;
 
         protected:
@@ -99,6 +107,11 @@ namespace mt {
         template<typename TResult>
         bool TaskSimple<TResult>::is_completed() const {
             return m_job->is_executed();
+        }
+
+        template<typename TResult>
+        bool TaskSimple<TResult>::is_aborted() const {
+            return m_job->is_aborted();
         }
 
         template<typename TResult>
@@ -152,13 +165,16 @@ namespace mt {
               m_parent(std::move(parent_job)) {
 
             this->m_result = std::make_shared<std::optional<TResult>>();
-            this->m_job = m_parent->continue_with([parent_result, this_result = this->m_result, exec = std::move(executable)]() {
+
+            auto work = [parent_result, this_result = this->m_result, exec = std::move(executable)]() {
                 auto &p_opt = *parent_result;
                 auto &t_opt = *this_result;
 
                 assert(p_opt.has_value());
                 t_opt = std::move(std::make_optional(exec(p_opt.value())));
-            });
+            };
+
+            this->m_job = m_parent->continue_with(std::move(work), parent_job);
         }
 
     }// namespace detail

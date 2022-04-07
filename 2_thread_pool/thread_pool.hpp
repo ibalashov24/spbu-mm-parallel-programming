@@ -29,6 +29,8 @@ namespace mt {
     public:
         ThreadPool(std::size_t workers_count, std::shared_ptr<detail::WorkQueue> work_queue);
 
+        ~ThreadPool();
+
         template<typename TResult>
         std::shared_ptr<Task<TResult>> enqueue(std::function<TResult()> executable);
 
@@ -68,7 +70,6 @@ namespace mt {
             std::shared_ptr<WorkQueue> m_work_queue;
             std::exception_ptr m_exception_ptr;
 
-            std::atomic_bool m_can_execute{false};
             std::atomic_bool m_executed{false};
             std::atomic_bool m_aborted{false};
         };
@@ -82,7 +83,7 @@ namespace mt {
         }
 
         bool ThreadPoolJob::can_execute() const {
-            return m_can_execute.load();
+            return !m_executed.load() && (!m_parent || m_parent->is_executed());
         }
         bool ThreadPoolJob::is_executed() const {
             return m_executed.load();
@@ -95,12 +96,16 @@ namespace mt {
         }
 
         void ThreadPoolJob::execute() {
-            assert(m_can_execute.load());
-            assert(!m_executed.load());
+            if (m_parent && m_parent->is_aborted()) {
+                m_exception_ptr = std::make_exception_ptr(std::exception("parent is aborted"));
+                m_aborted.store(true);
+                m_executed.store(true);
+                return;
+            }
 
             try {
                 m_executable();
-            } catch (const std::exception &e) {
+            } catch (const std::exception &) {
                 m_exception_ptr = std::current_exception();
                 m_aborted.store(true);
             }
@@ -126,6 +131,7 @@ namespace mt {
 
     ThreadPool::ThreadPool(std::size_t workers_count, std::shared_ptr<detail::WorkQueue> work_queue)
         : m_workers(workers_count), m_work_queue(std::move(work_queue)) {
+
         if (!workers_count)
             throw std::exception("an attempt to create pool with 0 workers count");
 
@@ -134,13 +140,23 @@ namespace mt {
                 while (!m_finished.load()) {
                     auto job = m_work_queue->pop(worker_idx);
 
-                    if (job)
+                    if (job && job->can_execute()) {
                         job->execute();
-                    else
-                        std::this_thread::yield();
+                        continue;
+                    }
+
+                    if (job) {
+                        m_work_queue->enqueue(job);
+                    }
+
+                    std::this_thread::yield();
                 }
             }));
         }
+    }
+
+    ThreadPool::~ThreadPool() {
+        shutdown();
     }
 
     template<typename TResult>
@@ -148,7 +164,7 @@ namespace mt {
         auto result_ptr = std::make_shared<std::optional<TResult>>();
         auto work = [result_ptr, exec = std::move(executable)]() {
             auto &value = *result_ptr;
-            value = std::move(exec());
+            value = std::move(std::make_optional(exec()));
         };
 
         auto job = std::make_shared<detail::ThreadPoolJob>(std::move(work), m_work_queue, nullptr);

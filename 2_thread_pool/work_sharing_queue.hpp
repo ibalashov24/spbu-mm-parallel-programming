@@ -9,7 +9,6 @@
 
 #include <cassert>
 #include <cstddef>
-#include <deque>
 #include <mutex>
 #include <queue>
 #include <vector>
