@@ -65,20 +65,20 @@ namespace mt {
     namespace detail {
 
         /**
-         * @class TaskContinued
-         * @brief Auxiliary class used to implement `continue with` feature
+         * @class TaskSimple
+         * @brief Task wrapper for a specific job
          *
-         * @tparam TNewResult Type of the task result
+         * @tparam TResult Type of the task result
          */
         template<typename TResult>
-        class TaskContinued final : public Task<TResult> {
+        class TaskSimple : public Task<TResult> {
         public:
-            template<typename TParentResult>
-            TaskContinued(std::shared_ptr<Job> parent_job,
-                          std::shared_ptr<std::optional<TParentResult>> parent_result,
-                          std::function<TResult(TParentResult)> executable);
+            TaskSimple() = default;
 
-            ~TaskContinued() override = default;
+            TaskSimple(std::shared_ptr<Job> job,
+                       std::shared_ptr<std::optional<TResult>> result);
+
+            ~TaskSimple() override = default;
             [[nodiscard]] bool is_completed() const override;
             TResult result() const override;
 
@@ -86,19 +86,23 @@ namespace mt {
             [[nodiscard]] std::shared_ptr<Job> job_ptr() const override;
             [[nodiscard]] std::shared_ptr<std::optional<TResult>> result_ptr() const override;
 
-        private:
-            std::shared_ptr<std::optional<TResult>> m_result;
+        protected:
             std::shared_ptr<Job> m_job;
-            std::shared_ptr<Job> m_parent;
+            std::shared_ptr<std::optional<TResult>> m_result;
         };
 
         template<typename TResult>
-        bool TaskContinued<TResult>::is_completed() const {
+        TaskSimple<TResult>::TaskSimple(std::shared_ptr<Job> job, std::shared_ptr<std::optional<TResult>> result)
+            : m_job(std::move(job)), m_result(std::move(result)) {
+        }
+
+        template<typename TResult>
+        bool TaskSimple<TResult>::is_completed() const {
             return m_job->is_executed();
         }
 
         template<typename TResult>
-        TResult TaskContinued<TResult>::result() const {
+        TResult TaskSimple<TResult>::result() const {
             if (!m_job->is_executed())
                 throw std::exception("task is not completed yet");
             if (m_job->is_aborted())
@@ -110,21 +114,45 @@ namespace mt {
         }
 
         template<typename TResult>
-        std::shared_ptr<Job> TaskContinued<TResult>::job_ptr() const {
+        std::shared_ptr<Job> TaskSimple<TResult>::job_ptr() const {
             return m_job;
         }
+
         template<typename TResult>
-        std::shared_ptr<std::optional<TResult>> TaskContinued<TResult>::result_ptr() const {
+        std::shared_ptr<std::optional<TResult>> TaskSimple<TResult>::result_ptr() const {
             return m_result;
         }
+
+        /**
+         * @class TaskContinued
+         * @brief Auxiliary class used to implement `continue with` feature
+         *
+         * @tparam TNewResult Type of the task result
+         */
+        template<typename TResult>
+        class TaskContinued final : public TaskSimple<TResult> {
+        public:
+            template<typename TParentResult>
+            TaskContinued(std::shared_ptr<Job> parent_job,
+                          std::shared_ptr<std::optional<TParentResult>> parent_result,
+                          std::function<TResult(TParentResult)> executable);
+
+            ~TaskContinued() override = default;
+
+        private:
+            std::shared_ptr<Job> m_parent;
+        };
+
         template<typename TResult>
         template<typename TParentResult>
         TaskContinued<TResult>::TaskContinued(std::shared_ptr<Job> parent_job,
                                               std::shared_ptr<std::optional<TParentResult>> parent_result,
                                               std::function<TResult(TParentResult)> executable)
-            : m_result(std::make_shared<std::optional<TResult>>()), m_parent(std::move(parent_job)) {
+            : TaskSimple<TResult>(),
+              m_parent(std::move(parent_job)) {
 
-            m_job = m_parent->continue_with([parent_result, this_result = m_result, exec = std::move(executable)]() {
+            this->m_result = std::make_shared<std::optional<TResult>>();
+            this->m_job = m_parent->continue_with([parent_result, this_result = this->m_result, exec = std::move(executable)]() {
                 auto &p_opt = *parent_result;
                 auto &t_opt = *this_result;
 

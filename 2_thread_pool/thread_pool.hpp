@@ -10,6 +10,7 @@
 #include <atomic>
 #include <functional>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <job.hpp>
@@ -34,13 +35,94 @@ namespace mt {
         void shutdown();
 
     private:
-        void worker_func(std::size_t worker_idx);
-
-    private:
         std::vector<std::thread> m_workers;
         std::shared_ptr<detail::WorkQueue> m_work_queue;
         std::atomic_bool m_finished{false};
     };
+
+    namespace detail {
+
+        /**
+         * @class ThreadPoolJob
+         * @brief Job created when user submits something to the thread pool
+         */
+        class ThreadPoolJob final : public Job {
+        public:
+            ThreadPoolJob(std::function<void()> executable,
+                          std::shared_ptr<WorkQueue> work_queue,
+                          std::shared_ptr<Job> parent);
+
+            ~ThreadPoolJob() override = default;
+            bool can_execute() const override;
+            bool is_executed() const override;
+            bool is_aborted() const override;
+            std::exception_ptr exception_ptr() const override;
+            void execute() override;
+            void abort() override;
+            std::shared_ptr<Job> continue_with(std::function<void()> executable, std::shared_ptr<Job> parent) override;
+
+        private:
+            std::function<void()> m_executable;
+
+            std::shared_ptr<Job> m_parent;
+            std::shared_ptr<WorkQueue> m_work_queue;
+            std::exception_ptr m_exception_ptr;
+
+            std::atomic_bool m_can_execute{false};
+            std::atomic_bool m_executed{false};
+            std::atomic_bool m_aborted{false};
+        };
+
+        ThreadPoolJob::ThreadPoolJob(std::function<void()> executable,
+                                     std::shared_ptr<WorkQueue> work_queue,
+                                     std::shared_ptr<Job> parent)
+            : m_executable(std::move(executable)),
+              m_work_queue(std::move(work_queue)),
+              m_parent(std::move(parent)) {
+        }
+
+        bool ThreadPoolJob::can_execute() const {
+            return m_can_execute.load();
+        }
+        bool ThreadPoolJob::is_executed() const {
+            return m_executed.load();
+        }
+        bool ThreadPoolJob::is_aborted() const {
+            return m_aborted.load();
+        }
+        std::exception_ptr ThreadPoolJob::exception_ptr() const {
+            return is_aborted() ? m_exception_ptr : nullptr;
+        }
+
+        void ThreadPoolJob::execute() {
+            assert(m_can_execute.load());
+            assert(!m_executed.load());
+
+            try {
+                m_executable();
+            } catch (const std::exception &e) {
+                m_exception_ptr = std::current_exception();
+                m_aborted.store(true);
+            }
+
+            m_executed.store(true);
+        }
+
+        void ThreadPoolJob::abort() {
+            if (m_executed)
+                return;
+
+            m_aborted.store(true);
+            m_executed.store(true);
+        }
+
+        std::shared_ptr<Job> ThreadPoolJob::continue_with(std::function<void()> executable, std::shared_ptr<Job> parent) {
+            auto continue_job = std::make_shared<ThreadPoolJob>(std::move(executable), m_work_queue, parent);
+            m_work_queue->enqueue(continue_job);
+            return continue_job;
+        }
+
+    }// namespace detail
 
     ThreadPool::ThreadPool(std::size_t workers_count, std::shared_ptr<detail::WorkQueue> work_queue)
         : m_workers(workers_count), m_work_queue(std::move(work_queue)) {
@@ -58,6 +140,31 @@ namespace mt {
                         std::this_thread::yield();
                 }
             }));
+        }
+    }
+
+    template<typename TResult>
+    std::shared_ptr<Task<TResult>> ThreadPool::enqueue(std::function<TResult()> executable) {
+        auto result_ptr = std::make_shared<std::optional<TResult>>();
+        auto work = [result_ptr, exec = std::move(executable)]() {
+            auto &value = *result_ptr;
+            value = std::move(exec());
+        };
+
+        auto job = std::make_shared<detail::ThreadPoolJob>(std::move(work), m_work_queue, nullptr);
+        m_work_queue->enqueue(job);
+
+        return std::make_shared<detail::TaskSimple<TResult>>(job, result_ptr);
+    }
+
+    void ThreadPool::shutdown() {
+        auto is_finished = false;
+
+        if (m_finished.compare_exchange_strong(is_finished, true)) {
+            m_work_queue->shutdown();
+
+            for (auto &worker : m_workers)
+                worker.join();
         }
     }
 

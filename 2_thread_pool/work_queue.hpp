@@ -23,6 +23,7 @@ namespace mt::detail {
         virtual ~WorkQueue() = default;
         virtual std::shared_ptr<Job> pop(std::size_t worker_idx) = 0;
         virtual void enqueue(std::shared_ptr<Job> job) = 0;
+        virtual void shutdown() = 0;
     };
 
 }// namespace mt::detail

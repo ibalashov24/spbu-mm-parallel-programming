@@ -25,7 +25,8 @@ namespace mt::detail {
         [[nodiscard]] virtual bool is_aborted() const = 0;
         [[nodiscard]] virtual std::exception_ptr exception_ptr() const = 0;
         virtual void execute() = 0;
-        virtual std::shared_ptr<Job> continue_with(std::function<void()> executable) = 0;
+        virtual void abort() = 0;
+        virtual std::shared_ptr<Job> continue_with(std::function<void()> executable, std::shared_ptr<Job> parent) = 0;
     };
 
 }// namespace mt::detail

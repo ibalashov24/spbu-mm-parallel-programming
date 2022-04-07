@@ -29,6 +29,7 @@ namespace mt::detail {
         ~WorkStealingQueue() override = default;
         std::shared_ptr<Job> pop(std::size_t worker_idx) override;
         void enqueue(std::shared_ptr<Job> job) override;
+        void shutdown() override;
 
     private:
         std::size_t next_worker();
@@ -37,14 +38,23 @@ namespace mt::detail {
         std::vector<std::deque<std::shared_ptr<Job>>> m_tasks;
         std::size_t m_workers_count;
         std::size_t m_next_worker = 0;
+        bool m_shutdown = false;
 
         mutable std::mutex m_mutex;
         mutable std::condition_variable m_has_tasks;
     };
 
+    WorkStealingQueue::WorkStealingQueue(std::size_t workers_count) : m_workers_count(workers_count), m_tasks(workers_count) {
+        if (!workers_count)
+            throw std::exception("queue must have more than 0 workers");
+    }
+
     std::shared_ptr<Job> WorkStealingQueue::pop(std::size_t worker_idx) {
         std::lock_guard<std::mutex> lock(m_mutex);
         assert(worker_idx < m_workers_count);
+
+        if (m_shutdown)
+            return nullptr;
 
         if (!m_tasks[worker_idx].empty()) {
             auto &tasks = m_tasks[worker_idx];
@@ -68,7 +78,14 @@ namespace mt::detail {
     }
 
     void WorkStealingQueue::enqueue(std::shared_ptr<Job> job) {
+        assert(job);
         std::lock_guard<std::mutex> lock(m_mutex);
+
+        if (m_shutdown) {
+            job->abort();
+            return;
+        }
+
         m_tasks[next_worker()].push_back(std::move(job));
     }
 
@@ -78,9 +95,16 @@ namespace mt::detail {
         return next;
     }
 
-    WorkStealingQueue::WorkStealingQueue(std::size_t workers_count) : m_workers_count(workers_count), m_tasks(workers_count) {
-        if (!workers_count)
-            throw std::exception("queue must have more than 0 workers");
+    void WorkStealingQueue::shutdown() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_shutdown = true;
+
+        for (auto &queue : m_tasks) {
+            for (auto &task : queue) {
+                task->abort();
+            }
+            queue.clear();
+        }
     }
 
 }// namespace mt::detail
