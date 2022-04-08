@@ -1,9 +1,10 @@
 ﻿using Task1_Sync;
 
+
 int consumerNumber;
 int producerNumber;
-List<int> listOfObjects = new List<int>();
 
+var vList = new VolatileList<int>();
 
 /// <summary>
 /// Создание потребителей и производителей.
@@ -29,7 +30,7 @@ if (!int.TryParse(Console.ReadLine(), out consumerNumber))
 for (int i = 0; i < producerNumber; i++)
 {
     var producer = new Producer<int>(i);
-    Thread thread = new Thread(() => { producer.Produce(listOfObjects); });
+    Thread thread = new Thread(() => { producer.Produce(vList.ListOfObjects); });
     thread.Name = $"Producer {i}";
     thread.Start();
 }
@@ -37,7 +38,7 @@ for (int i = 0; i < producerNumber; i++)
 for (int i = 0; i < consumerNumber; i++)
 {
     var consumer = new Consumer<int>();
-    Thread thread = new Thread(() => { consumer.Consume(listOfObjects); });
+    Thread thread = new Thread(() => { consumer.Consume(vList.ListOfObjects); });
     thread.Name = $"Consumer {i}";
     thread.Start();
 }
