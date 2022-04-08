@@ -1,7 +1,7 @@
 /**
- * @file
+ * @file thread_pool.test.cpp
  * @author Egor Orachev
- * @date April 5, 2022
+ * @date 4/6/2022
  */
 
 #include <condition_variable>

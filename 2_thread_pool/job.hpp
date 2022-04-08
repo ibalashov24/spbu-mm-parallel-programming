@@ -1,7 +1,7 @@
 /**
- * @file
+ * @file job.hpp
  * @author Egor Orachev
- * @date April 5, 2022
+ * @date 4/6/2022
  */
 
 #ifndef SPBU_MM_PARALLEL_PROGRAMMING_JOB_HPP

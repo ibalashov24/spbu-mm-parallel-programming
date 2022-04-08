@@ -1,0 +1,2 @@
+add_executable(publisher_subscriber.test publisher_subscriber.test.cpp)
+target_include_directories(publisher_subscriber.test PRIVATE ${CMAKE_CURRENT_LIST_DIR})

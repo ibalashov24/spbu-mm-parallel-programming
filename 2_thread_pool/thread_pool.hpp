@@ -1,7 +1,7 @@
 /**
- * @file
+ * @file thread_pool.hpp
  * @author Egor Orachev
- * @date April 5, 2022
+ * @date 4/6/2022
  */
 
 #ifndef SPBU_MM_PARALLEL_PROGRAMMING_THREAD_POOL_HPP
@@ -31,9 +31,25 @@ namespace mt {
 
         ~ThreadPool();
 
+        /**
+         * @brief Enqueue new tasks for execution
+         *
+         * @tparam TResult Type of task result
+         * @param executable Function to execute
+         *
+         * @return Task to track the progress of the execution
+         */
         template<typename TResult>
         std::shared_ptr<Task<TResult>> enqueue(std::function<TResult()> executable);
 
+        /**
+         * @brief Shutdown thread pool
+         *
+         * @details
+         *  New enqueued tasks are aborted and not process. Previously enqueued
+         *  tasks, but not yet accepted for execution by a worker, are aborted.
+         *  Currently executed tasks by workers are processed and finished.
+         */
         void shutdown();
 
     private:
