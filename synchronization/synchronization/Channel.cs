@@ -35,6 +35,7 @@ public class Channel
             {
                 _mutex.ReleaseMutex();
             }
+            Thread.Sleep(0);
         }
     }
 }

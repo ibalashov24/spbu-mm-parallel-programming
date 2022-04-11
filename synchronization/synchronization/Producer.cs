@@ -2,8 +2,12 @@ namespace synchronization;
 
 public class Producer
 {
-    private bool _isLaunched = false;
+    private volatile bool _isLaunched = false;
+    
+    private readonly Mutex _mutex = new Mutex();
+    
     private Thread? _thread;
+    
     private readonly int _number;
 
     public Producer(int number)
@@ -13,23 +17,33 @@ public class Producer
 
     public bool Run(Channel channel)
     {
-        if (_isLaunched)
+        // делаем чтение флага, установку его в true и запуск потока атомарной операцией
+        // поэтому мы можем вызывать Run(channel) из разных потоков, функция идемпотентна 
+        _mutex.WaitOne();
+        try
         {
-            return false;
-        }
-
-        _thread = new Thread(() =>
-        {
-            while (_isLaunched)
+            if (_isLaunched)
             {
-                channel.Send(_number);
-                Thread.Sleep(2000);
+                return false;
             }
-        });
-        _thread.Name = $"producer_{_number}";
-        _isLaunched = true;
-        _thread.Start();
-        return true;
+
+            _thread = new Thread(() =>
+            {
+                while (_isLaunched)
+                {
+                    channel.Send(_number);
+                    Thread.Sleep(2000);
+                }
+            });
+            _thread.Name = $"producer_{_number}";
+            _isLaunched = true;
+            _thread.Start();
+            return _isLaunched;
+        }
+        finally
+        {
+            _mutex.ReleaseMutex();
+        }
     }
 
     public void Stop()
