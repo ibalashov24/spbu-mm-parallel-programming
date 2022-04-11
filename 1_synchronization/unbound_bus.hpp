@@ -74,7 +74,7 @@ namespace mt {
 
     template<typename T>
     T UnboundBus<T>::BusSubscription::consume() {
-        std::unique_lock<std::mutex> lock;
+        std::unique_lock<std::mutex> lock(m_mutex);
         m_cv.wait(lock, [&]() { return !m_messages.empty() || m_quit; });
 
         if (m_quit)
