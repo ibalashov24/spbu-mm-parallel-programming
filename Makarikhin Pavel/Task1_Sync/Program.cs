@@ -5,6 +5,8 @@ int consumerNumber;
 int producerNumber;
 
 var vList = new VolatileList<int>();
+var consumers = new List<Consumer<int>>();
+var producers = new List<Producer<int>>();
 
 /// <summary>
 /// Создание потребителей и производителей.
@@ -30,7 +32,8 @@ if (!int.TryParse(Console.ReadLine(), out consumerNumber))
 for (int i = 0; i < producerNumber; i++)
 {
     var producer = new Producer<int>(i);
-    Thread thread = new Thread(() => { producer.Produce(vList.ListOfObjects); });
+    producers.Add(producer);
+    var thread = new Thread(() => { producer.Produce(vList.ListOfObjects); });
     thread.Name = $"Producer {i}";
     thread.Start();
 }
@@ -38,7 +41,8 @@ for (int i = 0; i < producerNumber; i++)
 for (int i = 0; i < consumerNumber; i++)
 {
     var consumer = new Consumer<int>();
-    Thread thread = new Thread(() => { consumer.Consume(vList.ListOfObjects); });
+    consumers.Add(consumer);
+    var thread = new Thread(() => { consumer.Consume(vList.ListOfObjects); });
     thread.Name = $"Consumer {i}";
     thread.Start();
 }
@@ -49,5 +53,5 @@ for (int i = 0; i < consumerNumber; i++)
 /// 
 Console.ReadKey();
 
-Producer<int>.Stop = true;
-Consumer<int>.Stop = true;
+producers.ForEach(x => x.Stop());
+consumers.ForEach(x=>x.Stop());

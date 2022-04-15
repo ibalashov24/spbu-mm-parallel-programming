@@ -14,7 +14,7 @@ namespace Task1_Sync
         /// <summary>
         /// Флаг завершения потока.
         /// </summary>
-        public static bool Stop = false;
+        private volatile bool _Stop = false;
 
         /// <summary>
         /// Извлекает последний объект списка.
@@ -23,7 +23,7 @@ namespace Task1_Sync
         /// <param name="list">Список объектов.</param>
         public void Consume(List<T> list)
         {
-            while (!Stop)
+            while (!_Stop)
             {
                 lock (list)
                 {
@@ -42,6 +42,14 @@ namespace Task1_Sync
             }
 
             Console.WriteLine("Thread \"{0}\" is finished!", Thread.CurrentThread.Name);
+        }
+
+        /// <summary>
+        /// Останавливает работу потока.
+        /// </summary>
+        public void Stop()
+        {
+            _Stop = true;
         }
     }
 }
